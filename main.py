@@ -1,47 +1,63 @@
 import requests
+import os
+from twilio.rest import Client
 
 
 STOCK_NAME = "TSLA"
 COMPANY_NAME = "Tesla Inc"
 
 STOCK_ENDPOINT = "https://www.alphavantage.co/query"
-AV_API_KEY = "P8FS4K4GF733X9JG"
+NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
+
+STOCK_API_KEY = os.environ.get("STOCK_API_KEY")
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
+account_sid = "AC1bc31d1a2848dd4fcbe160eb0091be2e"
+auth_token = os.environ.get("AUTH_TOKEN")
+
 stock_parameters = {
     "function": "TIME_SERIES_DAILY",
     "symbol": STOCK_NAME,
-    "apikey": AV_API_KEY,
+    "apikey": STOCK_API_KEY,
 }
 
-NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 
 response = requests.get(STOCK_ENDPOINT, params=stock_parameters)
-response.raise_for_status()
-data = response.json()
-yesterday_data = float(data["Time Series (Daily)"]["2022-08-26"]["4. close"])
-before_yesterday_data = float(data["Time Series (Daily)"]["2022-08-25"]["4. close"])
-positive_price_diff = abs(yesterday_data - before_yesterday_data)
-percentage_diff = round((positive_price_diff / yesterday_data) * 100, 2)
-if percentage_diff > 5:
-    print("Get news!")
+data = response.json()["Time Series (Daily)"]
+data_list = [value for (key, value) in data.items()]
+yesterday_data = data_list[0]
+yesterday_closing_price = yesterday_data["4. close"]
+
+day_before_data = data_list[1]
+day_before_closing_price = day_before_data["4. close"]
+
+difference = float(yesterday_closing_price) - float(day_before_closing_price)
+up_down = ""
+if difference > 0:
+    up_down = "🔺"
 else:
-    print("No news")
+    up_down = "🔻"
 
+percentage_diff = round((difference / float(yesterday_closing_price)) * 100)
+if abs(percentage_diff) > 0:
+    news_parameters = {
+        "q": COMPANY_NAME,
+        "apiKey": NEWS_API_KEY,
+    }
+    response = requests.get(NEWS_ENDPOINT, params=news_parameters)
+    data = response.json()
+    first_three_articles = (data["articles"][:3])
 
+    formatted_articles = [f"{STOCK_NAME}: {up_down}{percentage_diff}% \n\nHeadline: {article['title']} \n\nBrief: {article['description']}" for article in first_three_articles]
+    print(formatted_articles)
+    client = Client(account_sid, auth_token)
 
-
-    ## STEP 1: Use https://www.alphavantage.co/documentation/#daily
-# When stock price increase/decreases by 5% between yesterday and the day before yesterday then print("Get News").
-
-#TODO 1. - Get yesterday's closing stock price. Hint: You can perform list comprehensions on Python dictionaries. e.g. [new_value for (key, value) in dictionary.items()]
-
-#TODO 2. - Get the day before yesterday's closing stock price
-
-#TODO 3. - Find the positive difference between 1 and 2. e.g. 40 - 20 = -20, but the positive difference is 20. Hint: https://www.w3schools.com/python/ref_func_abs.asp
-
-#TODO 4. - Work out the percentage difference in price between closing price yesterday and closing price the day before yesterday.
-
-#TODO 5. - If TODO4 percentage is greater than 5 then print("Get News").
-
+    for article in formatted_articles:
+        message = client.messages \
+            .create(
+            body= article,
+            from_='+12133547621',
+            to='+61 406 579 199'
+        )
     ## STEP 2: https://newsapi.org/ 
     # Instead of printing ("Get News"), actually get the first 3 news pieces for the COMPANY_NAME. 
 
